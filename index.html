@@ -8,26 +8,62 @@
 <style>
 body{
   background:#07080f;
-  color:white;
+  color:#e2e4f0;
   font-family:sans-serif;
   margin:0;
+  display:flex;
+  flex-direction:column;
+  height:100vh;
 }
-#chat{
-  height:80vh;
+
+.header{
+  padding:12px;
+  border-bottom:1px solid #1e2240;
+  font-weight:bold;
+}
+
+#messages{
+  flex:1;
   overflow:auto;
   padding:10px;
 }
+
 .msg{
+  display:flex;
   margin:10px;
+}
+
+.user{justify-content:flex-end;}
+.ai{justify-content:flex-start;}
+
+.bubble{
+  max-width:70%;
   padding:10px;
   border-radius:10px;
 }
-.user{background:#6c63ff;text-align:right;}
-.ai{background:#1a1f35;}
-input{
-  width:70%;
-  padding:10px;
+
+.user .bubble{
+  background:#6c63ff;
+  color:white;
 }
+
+.ai .bubble{
+  background:#131629;
+}
+
+.input-area{
+  display:flex;
+  padding:10px;
+  border-top:1px solid #1e2240;
+}
+
+input{
+  flex:1;
+  padding:10px;
+  border:none;
+  outline:none;
+}
+
 button{
   padding:10px;
 }
@@ -36,43 +72,55 @@ button{
 
 <body>
 
-<h2>🤖 CryptoMind AI</h2>
+<div class="header">🤖 CryptoMind AI</div>
 
-<div id="chat"></div>
+<div id="messages"></div>
 
-<input id="input" placeholder="Ask crypto question..." />
-<button onclick="send()">Send</button>
+<div class="input-area">
+  <input id="input" placeholder="Ask crypto question..." />
+  <button onclick="sendMessage()">Send</button>
+</div>
 
 <script>
 
-// error debug
-window.onerror = function(msg, url, line) {
-  alert("Error: " + msg + " line: " + line);
-};
+// escape
+function escapeHtml(s){
+  return s.replace(/&/g,'&amp;')
+          .replace(/</g,'&lt;')
+          .replace(/>/g,'&gt;');
+}
 
 // add message
-function add(role,text){
+function addMessage(role,text){
   const div=document.createElement("div");
   div.className="msg "+role;
-  div.innerText=text;
-  chat.appendChild(div);
-  chat.scrollTop=chat.scrollHeight;
+
+  text = text.replace(/\[\[CHART:(.+?)\]\]/g,"");
+
+  div.innerHTML=`<div class="bubble">${escapeHtml(text)}</div>`;
+  messages.appendChild(div);
+  messages.scrollTop=messages.scrollHeight;
 }
 
-// chart (simple)
-async function showChart(coin){
-  const res = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${coin}&vs_currencies=usd`);
-  const data = await res.json();
-  add("ai", "📊 "+coin+" price: $"+data[coin].usd);
+// chart
+async function renderChartCard(coin){
+  try{
+    const res=await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${coin}&vs_currencies=usd`);
+    const data=await res.json();
+
+    addMessage("ai","📊 "+coin.toUpperCase()+" price: $"+data[coin].usd);
+  }catch(e){
+    addMessage("ai","Chart error");
+  }
 }
 
-// send message
-async function send(){
+// send
+async function sendMessage(){
   const text=input.value.trim();
   if(!text) return;
 
-  add("user",text);
   input.value="";
+  addMessage("user",text);
 
   try{
     const res=await fetch('/api/chat',{
@@ -84,20 +132,16 @@ async function send(){
     const data=await res.json();
     let reply=data.reply || "No response";
 
-    // detect chart tag
-    const match = reply.match(/\[\[CHART:(.+?)\]\]/);
+    const charts=[...reply.matchAll(/\[\[CHART:(.+?)\]\]/g)];
 
-    // remove tag from text
-    reply = reply.replace(/\[\[CHART:.+?\]\]/,"");
+    addMessage("ai",reply);
 
-    add("ai",reply);
-
-    if(match){
-      showChart(match[1]);
+    for(const c of charts){
+      await renderChartCard(c[1]);
     }
 
   }catch(e){
-    add("ai","Error: "+e.message);
+    addMessage("ai","Error: "+e.message);
   }
 }
 
