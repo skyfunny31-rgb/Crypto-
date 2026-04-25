@@ -1,0 +1,124 @@
+<script>
+
+// ───────── HELPERS ─────────
+function escapeHtml(s){
+  return s.replace(/&/g,'&amp;')
+          .replace(/</g,'&lt;')
+          .replace(/>/g,'&gt;');
+}
+
+// ───────── SEND MESSAGE ─────────
+async function sendMessage() {
+  const input = document.getElementById('userInput');
+  const text = input.value.trim();
+  if (!text) return;
+
+  // welcome remove
+  const welcome = document.getElementById('welcome');
+  if(welcome) welcome.remove();
+
+  input.value = '';
+  document.getElementById('sendBtn').disabled = true;
+
+  addMessage('user', text);
+  addTyping();
+
+  try {
+    const res = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: text })
+    });
+
+    const data = await res.json();
+
+    // একটু delay দিলে real feel আসে
+    await new Promise(r => setTimeout(r, 400));
+
+    removeTyping();
+
+    let reply = data.reply || "⚠️ No response";
+
+    // chart detect
+    const chartMatches = [...reply.matchAll(/\[\[CHART:([a-z0-9-]+)\]\]/g)];
+
+    // message show
+    addMessage('ai', reply);
+
+    // chart show
+    for (const match of chartMatches) {
+      await renderChartCard(match[1]);
+    }
+
+  } catch (e) {
+    removeTyping();
+    addMessage('ai', "⚠️ Error: " + e.message);
+  }
+
+  document.getElementById('sendBtn').disabled = false;
+  document.getElementById('userInput').focus();
+}
+
+// ───────── MESSAGE UI ─────────
+function addMessage(role, text) {
+  const container = document.getElementById('messages');
+  const div = document.createElement('div');
+  div.className = `msg ${role}`;
+
+  // chart tag remove
+  let formattedText = text.replace(/\[\[CHART:([a-z0-9-]+)\]\]/g, '');
+
+  // নিরাপদ করা (XSS fix)
+  formattedText = escapeHtml(formattedText);
+
+  div.innerHTML = `
+    <div class="avatar ${role}">${role==='ai'?'🔮':'👤'}</div>
+    <div class="bubble">${formattedText}</div>
+  `;
+
+  container.appendChild(div);
+  container.scrollTop = container.scrollHeight;
+}
+
+// ───────── TYPING ─────────
+function addTyping() {
+  const container = document.getElementById('messages');
+  const div = document.createElement('div');
+  div.id = 'typing';
+  div.className = 'msg ai typing';
+  div.innerHTML = `
+    <div class="avatar ai">🔮</div>
+    <div class="bubble">
+      <div class="typing-dot"></div>
+      <div class="typing-dot"></div>
+      <div class="typing-dot"></div>
+    </div>
+  `;
+  container.appendChild(div);
+  container.scrollTop = container.scrollHeight;
+}
+
+function removeTyping() {
+  const t = document.getElementById('typing');
+  if(t) t.remove();
+}
+
+// ───────── INPUT HELPERS ─────────
+function quickAsk(q) {
+  document.getElementById('userInput').value = q;
+  sendMessage();
+}
+
+function handleKey(e) {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    sendMessage();
+  }
+}
+
+function autoResize(el) {
+  el.style.height = 'auto';
+  el.style.height = el.scrollHeight + 'px';
+}
+
+</script>
